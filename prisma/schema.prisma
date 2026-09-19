@@ -1,0 +1,246 @@
+// This is your Prisma schema file
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================
+// MODÈLE UTILISATEUR
+// ============================================
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  role          UserRole  @default(ARCHIVISTE)
+  twoFactorSecret  String?
+  twoFactorEnabled Boolean   @default(false)
+  
+  // Relations
+  accounts      Account[]
+  sessions      Session[]
+  archives      Archive[]
+  auditLogs     AuditLog[]
+  notificationSettings  NotificationSettings?
+  notifications         Notification[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  ARCHIVISTE
+  CONSULTATION
+}
+
+// ============================================
+// AUTH.JS (NextAuth)
+// ============================================
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ============================================
+// MODÈLE ARCHIVE (cœur de l'application)
+// ============================================
+model Archive {
+  id              String    @id @default(cuid())
+  archiveNumber   String    @unique // ARC-2026-000001
+  
+  // Informations du document
+  title           String
+  reference       String?
+  documentType    String    // Contrat, Facture, etc.
+  category        String    // Juridique, Finance, etc.
+  department      String    // Administration, Commercial, etc.
+  author          String?
+  
+  // Dates
+  documentDate    DateTime?
+  archivedAt      DateTime  @default(now())
+  expirationDate  DateTime?
+  
+  // Classification
+  confidentiality String    @default("Interne") // Public, Interne, Confidentiel, Très confidentiel
+  keywords        String?
+  description     String?   @db.Text
+  
+  // Emplacement physique
+  physicalLocation String?
+  
+  // Statut
+  status          ArchiveStatus @default(ACTIF)
+  deletedAt       DateTime?
+  
+  // Relations
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  driveFile       DriveFile?
+  auditLogs       AuditLog[]
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([archiveNumber])
+  @@index([category])
+  @@index([department])
+  @@index([status])
+  @@map("archives")
+}
+
+enum ArchiveStatus {
+  ACTIF
+  ARCHIVE
+  EXPIRE
+  SUPPRIME
+}
+
+// ============================================
+// FICHIER GOOGLE DRIVE
+// ============================================
+model DriveFile {
+  id              String   @id @default(cuid())
+  archiveId       String   @unique
+  archive         Archive  @relation(fields: [archiveId], references: [id], onDelete: Cascade)
+  
+  // Identifiants Google Drive
+  googleFileId    String   @unique
+  googleFolderId  String?
+  driveUrl        String?
+  
+  // Informations du fichier
+  fileName        String
+  mimeType        String
+  fileSize        BigInt
+  
+  // Sécurité / Intégrité
+  sha256          String   // Empreinte du fichier
+  
+  // Versioning (pour plus tard)
+  version         Int      @default(1)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([googleFileId])
+  @@map("drive_files")
+}
+
+// ============================================
+// JOURNAL D'AUDIT (historique des actions)
+// ============================================
+model AuditLog {
+  id          String   @id @default(cuid())
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  archiveId   String?
+  archive     Archive? @relation(fields: [archiveId], references: [id], onDelete: SetNull)
+  
+  action      AuditAction
+  description String?  @db.Text
+  metadata    Json?    // Données supplémentaires en JSON
+  
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([archiveId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+enum AuditAction {
+  CONNEXION
+  DECONNEXION
+  CREATION_ARCHIVE
+  MODIFICATION_ARCHIVE
+  CONSULTATION_ARCHIVE
+  TELECHARGEMENT_FICHIER
+  SUPPRESSION_ARCHIVE
+  RESTAURATION_ARCHIVE
+  MODIFICATION_PARAMETRES
+}
+
+// ============================================
+// PARAMÈTRES (listes déroulantes)
+// ============================================
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique // "documentTypes", "categories", "departments", etc.
+  value     Json     // Tableau JSON des valeurs
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
+
+
+model NotificationSettings {
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emailNotifications    Boolean  @default(true)
+  expirationAlerts      Boolean  @default(true)
+  weeklyDigest          Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        String   // EXPIRATION_ALERT, WEEKLY_DIGEST, SYSTEM
+  title       String
+  message     String
+  read        Boolean  @default(false)
+  emailSent   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}

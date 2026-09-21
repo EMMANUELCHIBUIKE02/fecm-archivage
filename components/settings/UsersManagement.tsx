@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Archive, Eye, ShieldCheck, Users } from "lucide-react"
+import { Archive, CalendarDays, Eye, ShieldCheck, Users } from "lucide-react"
 import type { UserRole } from "@prisma/client"
 
 type ManagedUser = {
@@ -86,35 +86,54 @@ export default function UsersManagement({ initialUsers, currentUserId }: UsersMa
             <p className="py-8 text-center text-sm text-gray-500">Aucun utilisateur</p>
           ) : (
             roleUsers.map((user) => (
-              <div key={user.id} className="shrink-0 grid w-full grid-cols-1 items-center gap-4 rounded-lg border border-gray-200 p-4 sm:grid-cols-[1.5fr_1fr_1fr_1.25fr] sm:gap-x-10">
-                <div className="min-w-0">
-                  <p className="font-medium text-gray-900">{user.name || "Utilisateur"}</p>
-                  <p className="break-all text-sm text-gray-500">{user.email}</p>
-                  {user.id === currentUserId && (
-                    <span className="text-xs text-blue-600">Votre compte</span>
-                  )}
+              <div key={user.id} className="shrink-0 rounded-lg border border-gray-200 bg-white p-4 transition-colors hover:border-gray-300 sm:p-5">
+                <div className="grid gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(250px,1fr)_minmax(150px,0.8fr)] lg:items-center">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-sm font-semibold text-blue-700">
+                      {(user.name || "U").charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-gray-900">{user.name || "Utilisateur"}</p>
+                      <p className="truncate text-sm text-gray-500" title={user.email}>{user.email}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 border-y border-gray-100 py-3 lg:border-y-0 lg:border-l lg:py-0 lg:pl-5">
+                    <div className="flex items-center gap-2">
+                      <Archive className="h-4 w-4 text-blue-600" />
+                      <div>
+                        <p className="text-xs text-gray-500">Archives</p>
+                        <p className="font-medium text-gray-900">{user._count.archives}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CalendarDays className="h-4 w-4 text-gray-400" />
+                      <div>
+                        <p className="text-xs text-gray-500">Inscrit le</p>
+                        <p className="font-medium text-gray-900">{new Date(user.createdAt).toLocaleDateString("fr-FR")}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <label className="w-full text-xs font-medium text-gray-600">
+                    Rôle
+                    <select
+                      value={user.role}
+                      disabled={savingUserId === user.id}
+                      onChange={(event) => updateRole(user.id, event.target.value as UserRole)}
+                      className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    >
+                      {roles.map((availableRole) => (
+                        <option key={availableRole} value={availableRole}>
+                          {roleDetails[availableRole].label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                 </div>
-                <div className="text-sm text-gray-600">
-                  <span>{user._count.archives} archive{user._count.archives > 1 ? "s" : ""}</span>
-                </div>
-                <div className="text-sm text-gray-600">
-                  {new Date(user.createdAt).toLocaleDateString("fr-FR")}
-                </div>
-                <label className="w-full text-xs font-medium text-gray-600">
-                  Rôle
-                  <select
-                    value={user.role}
-                    disabled={savingUserId === user.id}
-                    onChange={(event) => updateRole(user.id, event.target.value as UserRole)}
-                    className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900"
-                  >
-                    {roles.map((availableRole) => (
-                      <option key={availableRole} value={availableRole}>
-                        {roleDetails[availableRole].label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                {user.id === currentUserId && (
+                  <span className="mt-3 inline-flex rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">Votre compte</span>
+                )}
               </div>
             ))
           )}
